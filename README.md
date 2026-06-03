@@ -1,9 +1,13 @@
-# PCIe DMA Driver
+# PCI DMA Driver
 
-A custom PCIe DMA kernel driver and matching QEMU device model for Linux driver
+A custom PCI DMA kernel driver and matching QEMU device model for Linux driver
 development on **Jetson Orin Nano** (JetPack 6.2). Includes a full sysfs
 interface (`dma_stats/` and `dma_info/`) and a userspace test program that
 validates H2D and D2H transfers at ~960–1692 MB/s depending on the unit.
+
+The device is currently conventional PCI, not PCIe, and x16 upgrade is a future step.
+
+
 
 ```
 /sys/bus/pci/devices/0000:00:03.0/
@@ -304,7 +308,10 @@ sudo /tmp/dma_test
 
 ---
 
-CXL feature will be added in future 
+## Roadmap / Future Work
+
+PCIe x16 endpoint upgrade
+The device model currently declares itself as a conventional PCI device. Planned upgrade to a proper PCIe endpoint with x16 link width by changing the interface declaration to INTERFACE_PCIE_DEVICE, adding a PCIe capability structure via pcie_endpoint_cap_init(), and setting x16 link width via pcie_cap_lnkcap_set() in pcie_dma.c. The kernel driver requires no changes for this upgrade.
 
 ## License
 
