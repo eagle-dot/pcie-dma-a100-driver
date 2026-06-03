@@ -310,7 +310,7 @@ sudo /tmp/dma_test
 
 ## Roadmap / Future Work
 
-PCIe x16 endpoint upgrade
+PCIe x16 endpoint upgrade -
 The device model currently declares itself as a conventional PCI device. Planned upgrade to a proper PCIe endpoint with x16 link width by changing the interface declaration to INTERFACE_PCIE_DEVICE, adding a PCIe capability structure via pcie_endpoint_cap_init(), and setting x16 link width via pcie_cap_lnkcap_set() in pcie_dma.c. The kernel driver requires no changes for this upgrade.
 
 ## License
