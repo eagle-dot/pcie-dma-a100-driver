@@ -15,7 +15,7 @@
  *   0x18  DMA_IRQ_MASK  1 = enable completion interrupt
  *   0x1C  DMA_IRQ_ACK   write 1 to clear interrupt
  *
- * Vendor:Device = 0x1234:0xDEAD
+ * Vendor:Device = 0x1234:0xA100
  *
  * Build: copy this file into qemu/hw/misc/pcie_dma.c
  *        add to qemu/hw/misc/meson.build:
@@ -145,7 +145,7 @@ static uint64_t bar0_read(void *opaque, hwaddr addr, unsigned size)
     default:
         qemu_log_mask(LOG_UNIMP,
             "pcie_dma: bar0 read unknown reg 0x%"HWADDR_PRIx"\n", addr);
-        return 0xDEADBEEF;
+        return 0xA100BEEF;
     }
 }
 

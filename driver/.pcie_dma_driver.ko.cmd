@@ -1,0 +1,1 @@
+cmd_/home/seattle/vm-driver-dev/pcie-dma-driver/driver/pcie_dma_driver.ko := ld -r -EL  -maarch64elf -z noexecstack --build-id=sha1  -T scripts/module.lds -o /home/seattle/vm-driver-dev/pcie-dma-driver/driver/pcie_dma_driver.ko /home/seattle/vm-driver-dev/pcie-dma-driver/driver/pcie_dma_driver.o /home/seattle/vm-driver-dev/pcie-dma-driver/driver/pcie_dma_driver.mod.o;  true
