@@ -14,7 +14,7 @@
 #include <linux/atomic.h>
 #define DRIVER_NAME      "pcie_dma"
 #define DMA_VENDOR_ID    0x1234
-#define DMA_DEVICE_ID    0xDEAD
+#define DMA_DEVICE_ID    0xA100
 #define REG_DMA_SRC      0x00
 #define REG_DMA_SRC_HI   0x04
 #define REG_DMA_DST      0x08

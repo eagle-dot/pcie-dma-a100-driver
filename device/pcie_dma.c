@@ -61,7 +61,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(PCIeDMAState, PCIE_DMA)
 #define STATUS_ERROR        0x03
 
 #define DMA_VENDOR_ID       0x1234
-#define DMA_DEVICE_ID       0xDEAD
+#define DMA_DEVICE_ID       0xA100
 #define DMA_BUF_SIZE        (1 * MiB)
 #define BAR0_SIZE           (4 * KiB)
 
