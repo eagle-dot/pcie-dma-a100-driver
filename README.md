@@ -43,7 +43,7 @@ This is a refined version of PCI-based DMA  https://github.com/eagle-dot/pcie-dm
 | **Disk space** | ~5 GB free |
 | **Time** | ~20 minutes end to end |
 
-> This project has been tested on three Jetson Orin Nano units. It will not
+> This project has been tested on Jetson Orin Nano unit. It will not
 > work on x86 hosts without modifications to the VM launch script and driver.
 
 ---
