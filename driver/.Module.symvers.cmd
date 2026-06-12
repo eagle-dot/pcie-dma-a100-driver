@@ -1,1 +1,0 @@
-cmd_/home/seattle/vm-driver-dev/pcie-dma-driver/driver/Module.symvers := sed 's/\.ko$$/\.o/' /home/seattle/vm-driver-dev/pcie-dma-driver/driver/modules.order | scripts/mod/modpost -m   -o /home/seattle/vm-driver-dev/pcie-dma-driver/driver/Module.symvers -e -i Module.symvers   -T -

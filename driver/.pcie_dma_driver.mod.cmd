@@ -1,1 +1,0 @@
-cmd_/home/seattle/vm-driver-dev/pcie-dma-driver/driver/pcie_dma_driver.mod := printf '%s\n'   pcie_dma_driver.o | awk '!x[$$0]++ { print("/home/seattle/vm-driver-dev/pcie-dma-driver/driver/"$$0) }' > /home/seattle/vm-driver-dev/pcie-dma-driver/driver/pcie_dma_driver.mod

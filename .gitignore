@@ -1,0 +1,10 @@
+# Kernel build artifacts
+driver/*.ko
+driver/*.o
+driver/*.mod
+driver/*.mod.c
+driver/*.mod.o
+driver/.*.cmd
+driver/Module.symvers
+driver/modules.order
+driver/.tmp_versions/
