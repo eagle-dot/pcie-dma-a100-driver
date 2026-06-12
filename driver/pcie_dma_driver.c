@@ -1,4 +1,4 @@
-/* pcie_dma_driver.c v0.3 - PCIe DMA driver with sysfs stats + info */
+/* pcie_dma_driver.c v0.4 - PCIe DMA driver with sysfs stats + info + ioctl */
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/interrupt.h>
@@ -12,6 +12,7 @@
 #include <linux/io.h>
 #include <linux/ktime.h>
 #include <linux/atomic.h>
+#include "pcie_dma_ioctl.h"
 #define DRIVER_NAME      "pcie_dma"
 #define DMA_VENDOR_ID    0x1234
 #define DMA_DEVICE_ID    0xA100
@@ -108,12 +109,66 @@ static ssize_t dma_read(struct file *f, char __user *u, size_t n, loff_t *p)
     if (!ret) ret = copy_to_user(u, d->dma_vaddr, n) ? -EFAULT : (int)n;
     mutex_unlock(&d->lock); return ret;
 }
+static long dma_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
+{
+    struct dma_dev *d = f->private_data;
+    void __user *uarg = (void __user *)arg;
+
+    switch (cmd) {
+    case DMA_IOCTL_GET_STATUS: {
+        __u32 status = reg_read(d, REG_DMA_STATUS);
+        return copy_to_user(uarg, &status, sizeof(status)) ? -EFAULT : 0;
+    }
+    case DMA_IOCTL_GET_STATS: {
+        struct dma_ioctl_stats s;
+        s64 tc = atomic64_read(&d->stats.transfer_count);
+        s.bytes_written   = atomic64_read(&d->stats.bytes_written);
+        s.bytes_read      = atomic64_read(&d->stats.bytes_read);
+        s.irq_count       = atomic64_read(&d->stats.irq_count);
+        s.transfer_count  = (u64)tc;
+        s.last_latency_us = atomic64_read(&d->stats.last_latency_us);
+        s.avg_latency_us  = tc ? atomic64_read(&d->stats.total_latency_us) / tc : 0;
+        return copy_to_user(uarg, &s, sizeof(s)) ? -EFAULT : 0;
+    }
+    case DMA_IOCTL_RESET_STATS:
+        atomic64_set(&d->stats.bytes_written,    0);
+        atomic64_set(&d->stats.bytes_read,       0);
+        atomic64_set(&d->stats.irq_count,        0);
+        atomic64_set(&d->stats.transfer_count,   0);
+        atomic64_set(&d->stats.total_latency_us, 0);
+        atomic64_set(&d->stats.last_latency_us,  0);
+        return 0;
+    case DMA_IOCTL_GET_INFO: {
+        struct dma_ioctl_info info;
+        info.buf_phys_addr = (u64)d->dma_paddr;
+        info.bar0_start    = (u64)pci_resource_start(d->pdev, 0);
+        info.bar0_size     = (u64)pci_resource_len(d->pdev, 0);
+        info.buf_size      = DMA_BUF_SIZE;
+        info.vendor_id     = DMA_VENDOR_ID;
+        info.device_id     = DMA_DEVICE_ID;
+        info.hw_status     = reg_read(d, REG_DMA_STATUS);
+        return copy_to_user(uarg, &info, sizeof(info)) ? -EFAULT : 0;
+    }
+    case DMA_IOCTL_RESET_DEV:
+        if (mutex_lock_interruptible(&d->lock))
+            return -ERESTARTSYS;
+        reg_write(d, REG_DMA_IRQ_MASK, 0);
+        reg_write(d, REG_DMA_CMD,      0);
+        reg_write(d, REG_DMA_IRQ_ACK,  1);
+        mutex_unlock(&d->lock);
+        dev_info(&d->pdev->dev, "device reset via ioctl\n");
+        return 0;
+    default:
+        return -ENOTTY;
+    }
+}
 static const struct file_operations dma_fops = {
-    .owner   = THIS_MODULE,
-    .open    = dma_open,
-    .release = dma_release,
-    .read    = dma_read,
-    .write   = dma_write,
+    .owner          = THIS_MODULE,
+    .open           = dma_open,
+    .release        = dma_release,
+    .read           = dma_read,
+    .write          = dma_write,
+    .unlocked_ioctl = dma_ioctl,
 };
 /* --- sysfs dma_stats --- */
 #define STAT_SHOW(name, field) \
@@ -266,5 +321,5 @@ static struct pci_driver dma_driver = {
 module_pci_driver(dma_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("orin-dev");
-MODULE_DESCRIPTION("PCIe DMA engine driver with sysfs stats + info");
-MODULE_VERSION("0.3");
+MODULE_DESCRIPTION("PCIe DMA engine driver with sysfs stats + info + ioctl");
+MODULE_VERSION("0.4");

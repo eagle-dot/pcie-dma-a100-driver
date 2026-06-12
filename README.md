@@ -2,8 +2,9 @@
 
 A custom PCIe DMA kernel driver and matching QEMU device model for Linux driver
 development on **Jetson Orin Nano** (JetPack 6.2). Includes a full sysfs
-interface (`dma_stats/` and `dma_info/`) and a userspace test program that
-validates H2D and D2H transfers at ~2600 MB/s average throughput.
+interface (`dma_stats/` and `dma_info/`), an ioctl interface for status queries
+and device reset, and userspace test programs that validate H2D and D2H
+transfers at ~2600 MB/s average throughput.
 
 The device is a **PCIe endpoint with x16 link width and Gen2 (5 GT/s) speed**.
 
@@ -56,9 +57,11 @@ pcie-dma-driver/
 │   └── pcie_dma.c          QEMU device model (inject into QEMU source tree)
 ├── driver/
 │   ├── pcie_dma_driver.c   Linux kernel module
+│   ├── pcie_dma_ioctl.h    ioctl definitions (shared with userspace)
 │   └── Makefile
 ├── test/
-│   └── dma_test.c          Userspace validation test
+│   ├── dma_test.c          Userspace DMA throughput test
+│   └── ioctl_test.c        Userspace ioctl validation test
 └── scripts/
     └── start-vm.sh         QEMU VM launch script
 ```
@@ -81,6 +84,46 @@ The device exposes 8 MMIO registers in BAR0:
 | `0x1C` | `REG_DMA_IRQ_ACK` | Write `1` to clear interrupt |
 
 **Vendor ID:** `0x1234` — **Device ID:** `0xA100`
+
+---
+
+## ioctl Interface
+
+The driver exposes `/dev/pcie_dma0` with five ioctls defined in
+`driver/pcie_dma_ioctl.h` (include this header in userspace programs).
+
+| ioctl | Direction | Description |
+|-------|-----------|-------------|
+| `DMA_IOCTL_GET_STATUS` | `→ __u32` | Read `REG_DMA_STATUS` register directly |
+| `DMA_IOCTL_GET_STATS` | `→ dma_ioctl_stats` | All counters: bytes, IRQs, transfers, latency |
+| `DMA_IOCTL_RESET_STATS` | none | Zero all stat counters |
+| `DMA_IOCTL_GET_INFO` | `→ dma_ioctl_info` | BAR0 range, DMA buffer address, IDs, hw_status |
+| `DMA_IOCTL_RESET_DEV` | none | Soft-reset device registers (IRQ mask, CMD, ACK) |
+
+**hw_status values:**
+
+| Value | Meaning |
+|-------|---------|
+| `0` | IDLE |
+| `1` | BUSY |
+| `2` | DONE |
+| `3` | ERROR |
+
+**Userspace example:**
+```c
+#include "pcie_dma_ioctl.h"
+
+int fd = open("/dev/pcie_dma0", O_RDWR);
+
+uint32_t status;
+ioctl(fd, DMA_IOCTL_GET_STATUS, &status);
+
+struct dma_ioctl_stats stats;
+ioctl(fd, DMA_IOCTL_GET_STATS, &stats);
+
+ioctl(fd, DMA_IOCTL_RESET_STATS);
+ioctl(fd, DMA_IOCTL_RESET_DEV);
+```
 
 ---
 
@@ -242,15 +285,23 @@ sudo dmesg | tail -3
 
 ---
 
-## Step 9 — Run the test
+## Step 9 — Run the tests
 
+**DMA throughput test:**
 ```bash
-gcc -O2 -o /tmp/dma_test ~/driver-build/test/dma_test.c
+gcc -O2 -o /tmp/dma_test /mnt/drvshare/test/dma_test.c
 sudo /tmp/dma_test
 # Expected: All tests PASSED, ~2600+ MB/s average
 ```
 
-> `/tmp` is cleared on reboot — rebuild `dma_test` after each reboot.
+**ioctl test:**
+```bash
+gcc -O2 -I ~/driver-build/driver \
+    -o /tmp/ioctl_test /mnt/drvshare/test/ioctl_test.c
+sudo /tmp/ioctl_test
+```
+
+> `/tmp` is cleared on reboot — rebuild both test binaries after each reboot.
 
 ---
 
@@ -286,25 +337,37 @@ done
 nano ~/vm-driver-dev/driver_share/driver/pcie_dma_driver.c
 
 # In VM — rebuild and reload
-cd ~/driver-build
+cd ~/driver-build/driver
 make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
 sudo rmmod pcie_dma_driver 2>/dev/null || true
-sudo insmod ~/driver-build/pcie_dma_driver.ko
+sudo insmod ~/driver-build/driver/pcie_dma_driver.ko
 sudo dmesg | tail -5
 sudo /tmp/dma_test
+sudo /tmp/ioctl_test
 ```
+
+> **First build tip:** If you see `disagrees about version of symbol module_layout`,
+> delete any stale `Module.symvers` copied from the host share and rebuild:
+> ```bash
+> rm -f Module.symvers modules.order
+> make -C /lib/modules/$(uname -r)/build M=$(pwd) clean
+> make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
+> ```
 
 ---
 
 ## Benchmark results
 
-| Unit | Hostname | L4T | H2D avg | D2H avg |
-|------|----------|-----|---------|---------|
+| Unit | Hostname | L4T | H2D avg | H2D peak | H2D min | Runs |
+|------|----------|-----|---------|----------|---------|------|
+| 1 | mobileAI2 | R36.4.7 | ~2031 MB/s | ~2490 MB/s | ~1385 MB/s | 28 |
 
-| 1 | mobileAI2 | R36.4.7 | ~2643 MB/s | ~2616 MB/s |
-
-> Throughput improvement on mobileAI2 reflects the PCIe x16 Gen2 endpoint
-> upgrade and device ID change to `0xA100`. 
+> Throughput reflects host memory copy speed via QEMU's `pci_dma_read/write`,
+> not real PCIe bus bandwidth. Expect ±400 MB/s run-to-run variance due to
+> host scheduler and cache pressure. First iteration of each run is typically
+> 200–400 MB/s lower (cold DMA buffer). Sustained back-to-back testing causes
+> thermal throttling on the Jetson — throughput drops to ~1400 MB/s after
+> ~20+ consecutive runs.
 
 What is EMULATED (cosmetic only) 
 
@@ -342,7 +405,11 @@ sudo lspci -vv | grep -A30 "1234:a100" | grep -i lnk
 
 | Date | Change |
 |------|--------|
-| 2026-06-06 | Changed `DMA_DEVICE_ID`  to `0xA100` in both QEMU device model and kernel driver |
+| 2026-06-11 | Updated benchmark: ~2031 MB/s avg, ~2490 MB/s peak over 28 runs; noted thermal throttle at ~1400 MB/s |
+| 2026-06-11 | Added ioctl interface (`pcie_dma_ioctl.h`) with GET_STATUS, GET_STATS, RESET_STATS, GET_INFO, RESET_DEV |
+| 2026-06-11 | Added `test/ioctl_test.c` to validate all ioctl commands |
+| 2026-06-11 | Driver bumped to v0.4 |
+| 2026-06-06 | Changed `DMA_DEVICE_ID` to `0xA100` in both QEMU device model and kernel driver |
 | 2026-06-06 | Upgraded device from conventional PCI to PCIe x16 Gen2 endpoint (`INTERFACE_PCIE_DEVICE`) |
 | 2026-06-06 | Updated benchmark results reflecting x16 upgrade (~2600 MB/s on mobileAI2) |
 | 2026-06-06 | Added SSH access instructions and VM kernel build notes |
